@@ -24,6 +24,7 @@ def read_item(item_id: int, q: Optional[str] = None):
 
 @app.get("/search/keyword")
 def search_result(search: str = None):
+    print("검색어: ", search)
     qry = CreateEsIndex()
     search_key = search
     query = qry.create_complex_query(search_key)

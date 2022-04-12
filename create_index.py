@@ -164,5 +164,92 @@ def create_review_nlp_index():
     print(res.text)
 
 
+def create_mbti_index():
+    url = f"http://{config['host_url']}:9201/mbti"
+
+    item = {
+        "settings": {
+            "analysis": {
+              "analyzer": {
+                "nori_mixed": {
+                  "tokenizer": "nori_t_mixed",
+                  "filter": "shingle"
+                },
+                "nori_pos_noun": {
+                  "type": "custom",
+                  "tokenizer": "nori_t_mixed",
+                  "filter": "pos_filter"
+                }
+              },
+              "tokenizer": {
+                "nori_t_mixed": {
+                  "type": "nori_tokenizer",
+                  "decompound_mode": "mixed"
+                }
+              },
+              "filter": {
+                "pos_filter": {
+                  "type": "nori_part_of_speech",
+                  "stoptags": [
+                    "VV", "VA", "VX", "VCP", "VCN", "MM", "MAG", "MAJ",
+                    "IC", "J", "E",
+                    "XPN", "XSA", "XSN", "XSV",
+                    "SP", "SSC", "SSO", "SC", "SE",
+                    "UNA"
+                  ]
+                }
+              }
+            }
+          },
+        "mappings": {
+            "properties": {
+                "title": {
+                    "type": "text"
+                },
+                "contents": {
+                    "type": "text",
+                    "fields": {
+                        "full": {
+                          "type": "keyword"
+                        },
+                        "nori_mixed": {
+                            "type": "text",
+                            "analyzer": "nori_mixed",
+                            "search_analyzer": "standard"
+                        },
+                        "nori_noun": {
+                          "type": "text",
+                          "analyzer": "nori_pos_noun",
+                          "search_analyzer": "standard"
+                        }
+                    }
+                },
+                "keyword": {
+                    "type": "keyword"
+                },
+                "platform": {
+                    "type": "keyword"
+                },
+                "published_at": {
+                    "type": "date"
+                },
+                "doc_url": {
+                  "type": "text"
+                },
+                "comment_cnt": {
+                    "type": "integer"
+                },
+                "like_cnt": {
+                    "type": "integer"
+                }
+            }
+        }
+    }
+    payload = json.dumps(item)
+    headers = {'Content-Type': 'application/json'}
+    res = requests.request("PUT", url, headers=headers, data=payload)
+    print(res.text)
+
+
 if __name__ == '__main__':
-    create_review_index()
+    create_mbti_index()

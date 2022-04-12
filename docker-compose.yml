@@ -1,0 +1,130 @@
+version: "3"
+services:
+  db:
+    image: postgres:9.4
+    container_name: postgres
+    ports:
+      -  "5432:5432"
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+    environment:
+      - "POSTGRES_USER=${DB_USER_ID}"
+      - "POSTGRES_PASSWORD=${DB_USER_PASSWORD}"
+  es-master-01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.2
+    container_name: es-master-01
+    environment:
+      - node.name=es-master-01
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es-master-01:9300
+      - cluster.initial_master_nodes=es-master-01
+      # Master Cluster 가 있다면 ,(쉼표)로 분리해서 
+      # - discovery.seed_hosts=master-01,master-02,master-03
+      # - cluster.initial_master_nodes=master-01,master-02,master-03
+      - node.master=true
+      - node.data=false
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g" # MB 단위는 m 으로 설정
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - master01_data:/usr/share/elasticsearch/data
+      - master01_config:/usr/share/elasticsearch/config
+      - master01_plugins:/usr/share/elasticsearch/plugins
+    ports:
+      - 9300:9300
+    networks:
+      - es-network
+
+  es-data-01:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.2
+    container_name: es-data-01
+    environment:
+      - node.name=es-data-01
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es-master-01:9300
+      - node.master=false
+      - node.data=true
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - data01_data:/usr/share/elasticsearch/data
+      - data01_config:/usr/share/elasticsearch/config
+      - data01_plugins:/usr/share/elasticsearch/plugins
+    ports:
+      - 9201:9200
+    networks:
+      - es-network
+    depends_on:
+      - es-master-01
+
+  es-data-02:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.2
+    container_name: es-data-02
+    environment:
+      - node.name=es-data-02
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=es-master-01:9300
+      - node.master=false
+      - node.data=true
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -XmX1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - data02_data:/usr/share/elasticsearch/data
+      - data02_config:/usr/share/elasticsearch/config
+      - data02_plugins:/usr/share/elasticsearch/plugins
+    ports:
+      - 9202:9200
+    networks:
+      - es-network
+    depends_on:
+      - es-master-01
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.2
+    container_name: kibana
+    ports:
+      - 5601:5601
+    environment:
+      ELASTICSEARCH_URL: http://es-master-01:9200
+      ELASTICSEARCH_HOSTS: http://es-master-01:9200
+    networks:
+      - es-network
+    depends_on:
+      - es-master-01
+      - es-data-01
+      - es-data-02
+
+volumes:
+  master01_data:
+    driver: local
+  master01_config:
+    driver: local
+  master01_plugins:
+    driver: local
+  data01_data:
+    driver: local
+  data01_config:
+    driver: local
+  data01_plugins:
+    driver: local
+  data02_data:
+    driver: local
+  data02_config:
+    driver: local
+  data02_plugins:
+    driver: local
+
+networks:
+  es-network:
+    driver: bridge
