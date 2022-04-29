@@ -5,34 +5,107 @@ import uvicorn
 
 import json
 import elasticsearch
+import pickle
+
+with open("stopwords.pickle", "rb") as f:
+    stopwords = pickle.load(f)
 
 app = FastAPI()
-f = open('config.json')
-config = json.loads(f.read())
-es = elasticsearch.Elasticsearch([f"http://{config['host_url']}:9200"], http_auth=(config['username'], config['password']))
+# Docker Es 구성으로 인한 Config 변경 2022.04.29
+es = elasticsearch.Elasticsearch([f"http://localhost:9201"])
 
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
+@app.get('/')
+def get_root():
+    return {"data": "Hello world 🎖"}
 
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Optional[str] = None):
-    return {"item_id": item_id, "q": q}
+@app.get('/top/keywords/{mbti_type}')
+def get_top_keywords(mbti_type: str, q:Optional[str]=None):
+    es_query = {
+        "size": 0,
+        "query": {"match": {"keyword": mbti_type}},
+        "aggs": {
+            "term_cnt": {
+                "terms": {
+                    "field": "contents.nori_noun",
+                    "size": 1000
+                }
+            }
+        }
+    }
+    res = es.search(index="mbti_term", body=es_query)
+    bkt_list = res.body["aggregations"]["term_cnt"]["buckets"]
+    refine_bkt_list = [b for b in bkt_list if b['key'] not in stopwords]
+    refine_bkt_list = [r for r in refine_bkt_list if not r['key'].isdigit()]
+    return {"data": refine_bkt_list}
 
 
-@app.get("/search/keyword")
-def search_result(search: str = None):
-    print("검색어: ", search)
-    qry = CreateEsIndex()
-    search_key = search
-    query = qry.create_complex_query(search_key)
+@app.get('/top/keywords/regex/{mbti_type}')
+def get_top_keywords_regex(mbti_type: str, q: Optional[str]=None):
+    if mbti_type not in ["I", "E"]:
+        raise
 
-    t = es.search(index="review_pos", body=query)
-    doc_list = t.body['hits']['hits']
-    hit_docs = [d['_source'] for d in doc_list]
-    return {"result": hit_docs}
+    regex_q = f"{mbti_type}.*"
+    es_query = {
+        "size": 0,
+        "query": {"regexp": {"keyword": regex_q}},
+        "aggs": {
+            "term_cnt": {
+                "terms": {
+                    "field": "contents.nori_noun",
+                    "size": 1000
+                }
+            }
+        }
+    }
+    res = es.search(index="mbti_term", body=es_query)
+    bkt_list = res.body["aggregations"]["term_cnt"]["buckets"]
+    refine_bkt_list = [b for b in bkt_list if b['key'] not in stopwords]
+    refine_bkt_list = [r for r in refine_bkt_list if not r['key'].isdigit()]
+    return {"data": refine_bkt_list}
+
+
+@app.get('/top/keywords/search/{mbti_type}/{keyword}')
+def get_search_keyword(mbti_type: str, keyword: str, q: Optional[str]=None):
+    if mbti_type not in ["I", "E"]:
+        raise
+
+    regex_q = f"{mbti_type}.*"
+    es_query = {
+        "size": 0,
+        "query": {
+            "bool": {
+                "must": [
+                    {
+                        "match": {
+                            "contents": keyword
+                        }
+                    },
+                    {
+                        "regexp": {
+                            "keyword": regex_q
+                        }
+                    }
+                ]
+            }
+        },
+        "aggs": {
+            "term_cnt": {
+                "terms": {
+                    "field": "contents.nori_noun",
+                    "size": 1000
+                }
+            }
+        }
+    }
+    res = es.search(index="mbti_term", body=es_query)
+    bkt_list = res.body["aggregations"]["term_cnt"]["buckets"]
+    refine_bkt_list = [b for b in bkt_list if b['key'] not in stopwords]
+    refine_bkt_list = [r for r in refine_bkt_list if not r['key'].isdigit()]
+    return {"data": refine_bkt_list}
+
+
 
 if __name__ == '__main__':
     uvicorn.run(app, host="localhost", port=8000)
